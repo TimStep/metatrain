@@ -151,6 +151,18 @@ class ModelHypers(TypedDict):
     Additionally, the feedforward version uses bidirectional features flow during the
     message passing iterations, that favors features flowing from atom ``i`` to atom
     ``j`` to be not equal to the features flowing from atom ``j`` to atom ``i``."""
+    head_num_layers: int = 2
+    """Number of hidden layers in each prediction head MLP.
+
+    The default of 2 reproduces the original PET head architecture.
+    Increasing this may improve expressivity of the readout at a small
+    computational cost.
+    """
+    head_activation: Literal["SiLU", "GELU", "ReLU", "Tanh"] = "SiLU"
+    """Activation function used in the prediction head MLPs."""
+    head_dropout: float = 0.0
+    """Dropout probability applied after each activation in the prediction
+    head MLPs. Set to 0.0 to disable dropout (default)."""
     zbl: bool = False
     """Use ZBL potential for short-range repulsion"""
     long_range: LongRangeHypers = init_with_defaults(LongRangeHypers)

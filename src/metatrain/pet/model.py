@@ -81,6 +81,9 @@ class PET(ModelInterface[ModelHypers]):
         self.attention_temperature = self.hypers["attention_temperature"]
         self.transformer_type = self.hypers["transformer_type"]
         self.featurizer_type = self.hypers["featurizer_type"]
+        self.head_num_layers = self.hypers["head_num_layers"]
+        self.head_activation = self.hypers["head_activation"]
+        self.head_dropout = self.hypers["head_dropout"]
 
         self.atomic_types = dataset_info.atomic_types
         self.requested_nl = NeighborListOptions(
@@ -1198,6 +1201,29 @@ class PET(ModelInterface[ModelHypers]):
 
         return AtomisticModel(self.eval(), metadata, capabilities)
 
+    def _build_head_mlp(self, in_dim: int) -> torch.nn.Sequential:
+        """
+        Build a prediction head MLP with configurable depth, activation,
+        and dropout from model hyperparameters.
+
+        With default hypers (head_num_layers=2, head_activation="SiLU",
+        head_dropout=0.0) the resulting Sequential is identical to the
+        original hard-coded PET head, preserving checkpoint compatibility.
+
+        :param in_dim: Input dimension (d_node for node heads, d_pet for edge heads).
+        :return: A ``torch.nn.Sequential`` module.
+        """
+        activation_cls = getattr(torch.nn, self.head_activation)
+        layers: List[torch.nn.Module] = []
+        for i in range(self.head_num_layers):
+            layers.append(
+                torch.nn.Linear(in_dim if i == 0 else self.d_head, self.d_head)
+            )
+            layers.append(activation_cls())
+            if self.head_dropout > 0.0:
+                layers.append(torch.nn.Dropout(self.head_dropout))
+        return torch.nn.Sequential(*layers)
+
     def _add_output(self, target_name: str, target_info: TargetInfo) -> None:
         """
         Register a new output target by creating corresponding heads and last layers.
@@ -1225,24 +1251,14 @@ class PET(ModelInterface[ModelHypers]):
 
         self.node_heads[target_name] = torch.nn.ModuleList(
             [
-                torch.nn.Sequential(
-                    torch.nn.Linear(self.d_node, self.d_head),
-                    torch.nn.SiLU(),
-                    torch.nn.Linear(self.d_head, self.d_head),
-                    torch.nn.SiLU(),
-                )
+                self._build_head_mlp(self.d_node)
                 for _ in range(self.num_readout_layers)
             ]
         )
 
         self.edge_heads[target_name] = torch.nn.ModuleList(
             [
-                torch.nn.Sequential(
-                    torch.nn.Linear(self.d_pet, self.d_head),
-                    torch.nn.SiLU(),
-                    torch.nn.Linear(self.d_head, self.d_head),
-                    torch.nn.SiLU(),
-                )
+                self._build_head_mlp(self.d_pet)
                 for _ in range(self.num_readout_layers)
             ]
         )
