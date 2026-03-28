@@ -133,6 +133,56 @@ architecture:
                               prediction
 ```
 
+### Repacking a pre-trained checkpoint with new heads
+
+If you have a pre-trained PET checkpoint and want to swap the head
+architecture (e.g. deeper MLP, different activation), use `mtt repack`.
+It keeps the backbone weights intact and randomly initializes the new heads.
+
+**From a YAML config** (reads `architecture.model` section):
+
+```bash
+mtt repack pretrained.ckpt -o repacked.ckpt -c train.yaml
+```
+
+**From CLI flags:**
+
+```bash
+mtt repack pretrained.ckpt -o repacked.ckpt \
+    --node-head-num-layers 3 \
+    --node-head-activation GELU \
+    --node-head-dropout 0.1
+```
+
+**Both** (YAML as base, CLI flags override):
+
+```bash
+mtt repack pretrained.ckpt -o repacked.ckpt -c train.yaml --edge-head-dropout 0.2
+```
+
+Then fine-tune using the standard metatrain workflow:
+
+```yaml
+# train.yaml
+architecture:
+  name: pet
+  model:
+    node_head_num_layers: 3
+    node_head_activation: GELU
+    node_head_dropout: 0.1
+  training:
+    finetune:
+      read_from: repacked.ckpt
+      method: full   # or "heads" to only train the heads
+```
+
+```bash
+mtt train train.yaml
+```
+
+> The module can also be invoked directly as
+> `python -m metatrain.pet.repack_checkpoint --input ... --output ... --config ...`
+
 <!-- marker-documentation -->
 
 # Documentation

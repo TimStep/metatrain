@@ -14,6 +14,7 @@ from .cli.export import (
     _prepare_export_model_args,
     export_model,
 )
+from .cli.repack import _add_repack_parser, _prepare_repack_args, repack_model
 from .cli.train import _add_train_model_parser, _prepare_train_model_args, train_model
 from .utils.distributed.logging import is_main_process
 from .utils.logging import ROOT_LOGGER, setup_logging
@@ -54,6 +55,7 @@ def main():
     subparser = ap.add_subparsers(help="sub-command help")
     _add_eval_model_parser(subparser)
     _add_export_model_parser(subparser)
+    _add_repack_parser(subparser)
     _add_train_model_parser(subparser)
 
     args = ap.parse_args()
@@ -93,6 +95,9 @@ def main():
             elif callable == "export_model":
                 _prepare_export_model_args(args)
                 export_model(**args.__dict__)
+            elif callable == "repack_model":
+                _prepare_repack_args(args)
+                repack_model(**args.__dict__)
             elif callable == "train_model":
                 _prepare_train_model_args(args)
                 train_model(**args.__dict__)
