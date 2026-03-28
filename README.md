@@ -56,28 +56,38 @@ on a PR, since the docs use this README file directly.-->
 
 # Configurable PET Prediction Heads
 
-This fork adds three hyperparameters that control the prediction head MLPs
-in the PET architecture. The heads sit between the transformer backbone and the
-final linear projection for each target (energy, forces, etc.).
+This fork adds independently configurable prediction head MLPs for the
+node and edge branches of the PET architecture. The heads sit between the
+transformer backbone and the final linear projection for each target.
+
+**Node head** parameters:
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `head_num_layers` | `int` | `2` | Number of hidden layers in each head MLP. More layers increase readout expressivity at a small computational cost. |
-| `head_activation` | `str` | `"SiLU"` | Activation function after each hidden layer. Supported: `SiLU`, `GELU`, `ReLU`, `Tanh`. |
-| `head_dropout` | `float` | `0.0` | Dropout probability after each activation. Useful for regularization when fine-tuning on small datasets. |
+| `node_head_num_layers` | `int` | `2` | Number of hidden layers in the node head MLP. |
+| `node_head_activation` | `str` | `"SiLU"` | Activation function. Supported: `SiLU`, `GELU`, `ReLU`, `Tanh`. |
+| `node_head_dropout` | `float` | `0.0` | Dropout probability after each activation. |
 
-Default values reproduce the original PET head exactly, so existing
+**Edge head** parameters:
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `edge_head_num_layers` | `int` | `2` | Number of hidden layers in the edge head MLP. |
+| `edge_head_activation` | `str` | `"SiLU"` | Activation function. Supported: `SiLU`, `GELU`, `ReLU`, `Tanh`. |
+| `edge_head_dropout` | `float` | `0.0` | Dropout probability after each activation. |
+
+Default values reproduce the original PET heads exactly, so existing
 checkpoints load without any changes.
 
 ### When to change these settings
 
-- **`head_num_layers`** -- increase (e.g. 3--4) if the backbone is pre-trained
+- **`*_num_layers`** -- increase (e.g. 3--4) if the backbone is pre-trained
   and frozen and you need a more expressive readout; decrease to 1 for a
-  near-linear probe.
-- **`head_activation`** -- `SiLU` (default) works well in most cases. `GELU` is
-  a common alternative in transformer-based models. `ReLU` / `Tanh` are provided
-  for experimentation.
-- **`head_dropout`** -- start with 0.1--0.2 when fine-tuning on small datasets
+  near-linear probe. Node heads may benefit from more depth since node features
+  already contain aggregated neighborhood information.
+- **`*_activation`** -- `SiLU` (default) works well in most cases. `GELU` is
+  a common alternative in transformer-based models.
+- **`*_dropout`** -- start with 0.1--0.2 when fine-tuning on small datasets
   to reduce overfitting; keep at 0.0 for large-scale training from scratch.
 
 ### Example YAML configuration
@@ -88,9 +98,14 @@ architecture:
   model:
     d_pet: 128
     d_head: 128
-    head_num_layers: 3
-    head_activation: GELU
-    head_dropout: 0.1
+    # deeper node head with regularization
+    node_head_num_layers: 3
+    node_head_activation: GELU
+    node_head_dropout: 0.1
+    # simpler edge head
+    edge_head_num_layers: 2
+    edge_head_activation: SiLU
+    edge_head_dropout: 0.0
 ```
 
 ### Architecture diagram
@@ -101,12 +116,15 @@ architecture:
                      +--------------+--------------+
                      |                             |
                node features                 edge features
+               [N, d_node]                   [N, M, d_pet]
                      |                             |
               +-----------+                 +-----------+
-              | node head |                 | edge head |    <-- configurable MLPs
+              | node head |                 | edge head |    <-- independently configurable
               +-----------+                 +-----------+
                      |                             |
               node_last_layer              edge_last_layer   <-- Linear(d_head, output_dim)
+                     |                             |
+                     |                    * cutoff, sum over neighbors
                      |                             |
                      +------------- + -------------+
                                     |

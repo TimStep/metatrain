@@ -81,9 +81,12 @@ class PET(ModelInterface[ModelHypers]):
         self.attention_temperature = self.hypers["attention_temperature"]
         self.transformer_type = self.hypers["transformer_type"]
         self.featurizer_type = self.hypers["featurizer_type"]
-        self.head_num_layers = self.hypers["head_num_layers"]
-        self.head_activation = self.hypers["head_activation"]
-        self.head_dropout = self.hypers["head_dropout"]
+        self.node_head_num_layers = self.hypers["node_head_num_layers"]
+        self.node_head_activation = self.hypers["node_head_activation"]
+        self.node_head_dropout = self.hypers["node_head_dropout"]
+        self.edge_head_num_layers = self.hypers["edge_head_num_layers"]
+        self.edge_head_activation = self.hypers["edge_head_activation"]
+        self.edge_head_dropout = self.hypers["edge_head_dropout"]
 
         self.atomic_types = dataset_info.atomic_types
         self.requested_nl = NeighborListOptions(
@@ -1201,27 +1204,37 @@ class PET(ModelInterface[ModelHypers]):
 
         return AtomisticModel(self.eval(), metadata, capabilities)
 
-    def _build_head_mlp(self, in_dim: int) -> torch.nn.Sequential:
+    @staticmethod
+    def _build_head_mlp(
+        in_dim: int,
+        hidden_dim: int,
+        num_layers: int,
+        activation: str,
+        dropout: float,
+    ) -> torch.nn.Sequential:
         """
-        Build a prediction head MLP with configurable depth, activation,
-        and dropout from model hyperparameters.
+        Build a prediction head MLP.
 
-        With default hypers (head_num_layers=2, head_activation="SiLU",
-        head_dropout=0.0) the resulting Sequential is identical to the
-        original hard-coded PET head, preserving checkpoint compatibility.
+        With default hypers (num_layers=2, activation="SiLU", dropout=0.0)
+        the resulting Sequential is identical to the original hard-coded
+        PET head, preserving checkpoint compatibility.
 
         :param in_dim: Input dimension (d_node for node heads, d_pet for edge heads).
+        :param hidden_dim: Hidden / output dimension (d_head).
+        :param num_layers: Number of hidden layers.
+        :param activation: Name of the ``torch.nn`` activation class.
+        :param dropout: Dropout probability (0.0 to disable).
         :return: A ``torch.nn.Sequential`` module.
         """
-        activation_cls = getattr(torch.nn, self.head_activation)
+        activation_cls = getattr(torch.nn, activation)
         layers: List[torch.nn.Module] = []
-        for i in range(self.head_num_layers):
+        for i in range(num_layers):
             layers.append(
-                torch.nn.Linear(in_dim if i == 0 else self.d_head, self.d_head)
+                torch.nn.Linear(in_dim if i == 0 else hidden_dim, hidden_dim)
             )
             layers.append(activation_cls())
-            if self.head_dropout > 0.0:
-                layers.append(torch.nn.Dropout(self.head_dropout))
+            if dropout > 0.0:
+                layers.append(torch.nn.Dropout(dropout))
         return torch.nn.Sequential(*layers)
 
     def _add_output(self, target_name: str, target_info: TargetInfo) -> None:
@@ -1251,14 +1264,26 @@ class PET(ModelInterface[ModelHypers]):
 
         self.node_heads[target_name] = torch.nn.ModuleList(
             [
-                self._build_head_mlp(self.d_node)
+                self._build_head_mlp(
+                    in_dim=self.d_node,
+                    hidden_dim=self.d_head,
+                    num_layers=self.node_head_num_layers,
+                    activation=self.node_head_activation,
+                    dropout=self.node_head_dropout,
+                )
                 for _ in range(self.num_readout_layers)
             ]
         )
 
         self.edge_heads[target_name] = torch.nn.ModuleList(
             [
-                self._build_head_mlp(self.d_pet)
+                self._build_head_mlp(
+                    in_dim=self.d_pet,
+                    hidden_dim=self.d_head,
+                    num_layers=self.edge_head_num_layers,
+                    activation=self.edge_head_activation,
+                    dropout=self.edge_head_dropout,
+                )
                 for _ in range(self.num_readout_layers)
             ]
         )
