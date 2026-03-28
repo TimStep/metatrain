@@ -1,0 +1,39 @@
+seed: 42
+
+architecture:
+  name: pet
+  model:
+    cutoff: 5.0
+    d_pet: 256
+    d_node: 512
+    d_head: 256
+    num_gnn_layers: 4
+    num_attention_layers: 3
+    # custom heads: deeper than default, ReLU activation
+    node_head_num_layers: 3
+    node_head_activation: ReLU
+    node_head_dropout: 0.1
+    edge_head_num_layers: 3
+    edge_head_activation: ReLU
+    edge_head_dropout: 0.05
+  training:
+    batch_size: 8
+    num_epochs: 200
+    learning_rate: 5e-5
+    warmup_fraction: 0.05
+    grad_clip_norm: 1.0
+    finetune:
+      read_from: repacked.ckpt
+      method: full
+
+training_set:
+  systems:
+    read_from: data2.xyz
+    length_unit: angstrom
+  targets:
+    mtt::band_gap:
+      key: band_gap
+      unit: eV
+
+test_set: 0.1
+validation_set: 0.1

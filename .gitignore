@@ -169,6 +169,10 @@ cython_debug/
 *.csv
 wandb/
 
+# Finetuning example data and weights
+examples/pet-finetuning/*.xyz
+examples/pet-finetuning/*.ckpt
+
 # model output directories and extensions
 outputs/
 examples/basic_usage/*.xyz
